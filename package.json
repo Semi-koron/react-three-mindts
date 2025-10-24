@@ -1,0 +1,38 @@
+{
+  "name": "fiber-mind-ts",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "files": [
+    "dist",
+    "index.d.ts"
+  ],
+  "main": "./dist/counter.umd.cjs",
+  "module": "./dist/counter.js",
+  "types": "./index.d.ts",
+  "exports": {
+    "types": "./index.d.ts",
+    "import": "./dist/counter.js",
+    "require": "./dist/counter.umd.cjs"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.8",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.0.4",
+    "typescript": "~5.9.2",
+    "vite": "^7.1.5"
+  },
+  "dependencies": {
+    "@react-three/fiber": "^9.4.0",
+    "@types/three": "^0.180.0",
+    "mind-ar": "^1.2.5",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-webcam": "^7.2.0",
+    "three": "^0.180.0"
+  }
+}
