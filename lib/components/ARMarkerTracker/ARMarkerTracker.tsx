@@ -1,70 +1,134 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  Dispatch,
+  RefObject,
+  SetStateAction,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Webcam from "react-webcam";
 import { Controller } from "mind-ar/src/image-target/controller";
 import * as THREE from "three";
 
+import { Matrix4, Quaternion, Vector3 } from "three";
+import { Canvas, useThree } from "@react-three/fiber";
+import { Html } from "@react-three/drei";
+
 interface ARMarkerTrackerProps {
   markerUrl: string; // コンパイル済みマーカーデータのURL
+  children?: React.ReactNode;
 }
 
-export const ARMarkerTracker = ({ markerUrl }: ARMarkerTrackerProps) => {
-  const containerRef = useRef<HTMLDivElement>(null);
+export const ARMarkerTracker = ({
+  markerUrl,
+  children,
+}: ARMarkerTrackerProps) => {
   const webcamRef = useRef<Webcam>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null); // three renderer canvas
-  const overlayRef = useRef<HTMLCanvasElement | null>(null); // debug overlay
-  const tmpCanvasRef = useRef<HTMLCanvasElement | null>(null); // video -> canvas 毎フレーム描画用
-  const controllerRef = useRef<Controller | null>(null);
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const cameraRef = useRef<THREE.Camera | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const drawRafRef = useRef<number | null>(null);
-  const [isTracking, setIsTracking] = useState(false);
-  const [trackedMarkers, setTrackedMarkers] = useState<number[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({
     width: document.body.clientWidth,
     height: document.body.clientHeight,
   });
-  const [initialized, setInitialized] = useState(false);
 
-  // 親要素のサイズ監視
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const updateSize = () => {
-      const { width, height } = containerRef.current!.getBoundingClientRect();
-      setContainerSize({ width, height });
+  const [isCameraReady, setIsCameraReady] = useState(false);
+
+  const videoConstraints = useMemo(() => {
+    return {
+      facingMode: "environment",
+      width: { ideal: containerSize.width },
+      height: { ideal: containerSize.height },
     };
-    updateSize();
-    const ro = new ResizeObserver(updateSize);
-    ro.observe(containerRef.current);
-    return () => ro.disconnect();
-  }, []);
+  }, [containerSize.width, containerSize.height]);
 
-  const videoConstraints = {
-    facingMode: "environment",
-    width: { ideal: containerSize.width },
-    height: { ideal: containerSize.height },
-  };
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        width: "100%",
+        height: "100%",
+        position: "relative",
+      }}
+    >
+      {/* three renderer canvas */}
+      <Canvas style={{ position: "absolute", inset: 0 }}>
+        <ARContent
+          markerUrl={markerUrl}
+          containerRef={containerRef}
+          containerSize={containerSize}
+          setContainerSize={setContainerSize}
+          webcamRef={webcamRef}
+          isCameraReady={isCameraReady}
+        >
+          {children}
+        </ARContent>
+      </Canvas>
+      <Webcam
+        ref={webcamRef}
+        audio={false}
+        width={containerSize.width}
+        height={containerSize.height}
+        videoConstraints={videoConstraints}
+        onUserMedia={() => {
+          setIsCameraReady(true);
+        }}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          zIndex: -1,
+          pointerEvents: "none", // video にマウスイベントを通さない
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+        }}
+      />
+    </div>
+  );
+};
 
-  // Three renderer loop
-  const startRenderLoop = () => {
-    if (rafRef.current !== null) return;
-    const loop = () => {
-      if (rendererRef.current && sceneRef.current && cameraRef.current) {
-        rendererRef.current.render(sceneRef.current, cameraRef.current);
-      }
-      rafRef.current = requestAnimationFrame(loop);
-    };
-    rafRef.current = requestAnimationFrame(loop);
+interface ARContentProps {
+  markerUrl: string;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  containerSize: {
+    width: number;
+    height: number;
   };
-  const stopRenderLoop = () => {
-    if (rafRef.current !== null) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-  };
+  setContainerSize: Dispatch<
+    SetStateAction<{
+      width: number;
+      height: number;
+    }>
+  >;
+  webcamRef: RefObject<Webcam | null>;
+  isCameraReady: boolean;
+  children?: React.ReactNode;
+}
+
+export const ARContent = ({
+  markerUrl,
+  containerRef,
+  containerSize,
+  setContainerSize,
+  webcamRef,
+  isCameraReady,
+  children,
+}: ARContentProps) => {
+  const overlayRef = useRef<HTMLCanvasElement | null>(null); // debug overlay
+  const tmpCanvasRef = useRef<HTMLCanvasElement | null>(null); // video -> canvas 毎フレーム描画用
+  const controllerRef = useRef<Controller | null>(null);
+  const drawRafRef = useRef<number | null>(null);
+  const postMatricesRef = useRef<THREE.Matrix4[]>([]);
+  const [isTracking, setIsTracking] = useState(false);
+  const [trackedMarkers, setTrackedMarkers] = useState<number[]>([]);
+
+  // Anchor object ref (this is the object that will be moved to follow the marker)
+  const anchorRef = useRef<THREE.Group | null>(null);
+
+  const { camera } = useThree();
 
   // video -> tmp canvas 描画ループ（常時実行しておき、processVideo に tmp を渡す）
+  // objectFit: "cover" で表示されている部分のみを切り取って描画
   const startVideoToCanvasLoop = () => {
     if (drawRafRef.current !== null) return;
     const loop = () => {
@@ -84,13 +148,64 @@ export const ARMarkerTracker = ({ markerUrl }: ARMarkerTrackerProps) => {
         }
         const ctx = tmp.getContext("2d")!;
         ctx.clearRect(0, 0, tmp.width, tmp.height);
-        // drawImage using destination canvas size to ensure full coverage
-        ctx.drawImage(video, 0, 0, tmp.width, tmp.height);
+
+        // objectFit: "cover" と同じ動作を実装
+        // video の実際の解像度
+        const videoWidth = video.videoWidth;
+        const videoHeight = video.videoHeight;
+        const videoAspect = videoWidth / videoHeight;
+
+        // container（表示領域）のアスペクト比
+        const containerAspect = containerSize.width / containerSize.height;
+
+        // objectFit: "cover" の計算
+        let sourceX = 0;
+        let sourceY = 0;
+        let sourceWidth = videoWidth;
+        let sourceHeight = videoHeight;
+
+        if (videoAspect > containerAspect) {
+          // video が横長 -> 左右をトリミング
+          sourceWidth = videoHeight * containerAspect;
+          sourceX = (videoWidth - sourceWidth) / 2;
+        } else {
+          // video が縦長 -> 上下をトリミング
+          sourceHeight = videoWidth / containerAspect;
+          sourceY = (videoHeight - sourceHeight) / 2;
+        }
+
+        // 切り取った部分を tmp canvas に描画
+        ctx.drawImage(
+          video,
+          sourceX,
+          sourceY,
+          sourceWidth,
+          sourceHeight, // source rectangle
+          0,
+          0,
+          tmp.width,
+          tmp.height // destination rectangle
+        );
       }
       drawRafRef.current = requestAnimationFrame(loop);
     };
     drawRafRef.current = requestAnimationFrame(loop);
   };
+
+  // 親要素のサイズ監視
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const updateSize = () => {
+      const { width, height } = containerRef.current!.getBoundingClientRect();
+      setContainerSize({ width, height });
+    };
+    updateSize();
+    const ro = new ResizeObserver(updateSize);
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const stopVideoToCanvasLoop = () => {
     if (drawRafRef.current !== null) {
       cancelAnimationFrame(drawRafRef.current);
@@ -98,142 +213,173 @@ export const ARMarkerTracker = ({ markerUrl }: ARMarkerTrackerProps) => {
     }
   };
 
-  // Controller 初期化
-  useEffect(() => {
-    let cancelled = false;
-    const initController = async () => {
-      const webcam = webcamRef.current;
-      if (!webcam) return;
-      const video = webcam.video;
-      if (!video) return;
+  const initController = async (cancelled: { value: boolean }) => {
+    const webcam = webcamRef.current;
+    if (!webcam) {
+      console.log("webcam not found");
+      return;
+    }
+    const video = webcam.video;
+    if (!video) {
+      console.log("video element not found");
+      return;
+    }
 
-      await new Promise<void>((resolve) => {
-        if (video.readyState >= 2 && video.videoWidth && video.videoHeight) {
+    await new Promise<void>((resolve) => {
+      if (
+        video.readyState >= 2 &&
+        containerSize.width &&
+        containerSize.height
+      ) {
+        resolve();
+      } else {
+        const onLoaded = () => {
+          video.removeEventListener("loadedmetadata", onLoaded);
           resolve();
-        } else {
-          const onLoaded = () => {
-            video.removeEventListener("loadedmetadata", onLoaded);
-            resolve();
-          };
-          video.addEventListener("loadedmetadata", onLoaded);
-        }
-      });
-      if (cancelled) return;
-
-      const width = video.videoWidth;
-      const height = video.videoHeight;
-
-      // Three.js init
-      const scene = new THREE.Scene();
-      const canvas = canvasRef.current!;
-      const renderer = new THREE.WebGLRenderer({
-        canvas,
-        alpha: true,
-        antialias: true,
-      });
-      // pixel size
-      canvas.width = width;
-      canvas.height = height;
-      renderer.setSize(width, height, false);
-      sceneRef.current = scene;
-      rendererRef.current = renderer;
-
-      // overlay for debug
-      if (!overlayRef.current && containerRef.current) {
-        const ov = document.createElement("canvas");
-        ov.style.position = "absolute";
-        ov.style.top = "0";
-        ov.style.left = "0";
-        ov.style.pointerEvents = "none";
-        ov.style.width = "100%";
-        ov.style.height = "100%";
-        containerRef.current.appendChild(ov);
-        overlayRef.current = ov;
+        };
+        video.addEventListener("loadedmetadata", onLoaded);
       }
+    });
+    if (cancelled.value) return;
 
-      // tmp canvas (offscreen/hidden) - this is what controller will read each frame
-      if (!tmpCanvasRef.current && containerRef.current) {
-        const tmp = document.createElement("canvas");
-        // set initial pixel size to video
-        tmp.width = width;
-        tmp.height = height;
-        tmp.style.display = "none"; // keep hidden
-        containerRef.current.appendChild(tmp);
-        tmpCanvasRef.current = tmp;
-      }
+    // overlay for debug
+    if (!overlayRef.current && containerRef.current) {
+      const ov = document.createElement("canvas");
+      ov.style.position = "absolute";
+      ov.style.top = "0";
+      ov.style.left = "0";
+      ov.style.pointerEvents = "none";
+      ov.style.width = "100%";
+      ov.style.height = "100%";
+      containerRef.current.appendChild(ov);
+      overlayRef.current = ov;
+    }
 
-      // Controller init
-      const controller = new Controller({
-        inputWidth: width,
-        inputHeight: height,
-        maxTrack: 1,
-        onUpdate: (data) => {
-          if (!data || typeof data.type !== "string") return;
-          if (data.type === "updateMatrix") {
-            handleMatrixUpdate(data.targetIndex, data.worldMatrix);
-          } else if (data.type === "processDone") {
-            // optional debug hook
+    // tmp canvas (offscreen/hidden) - this is what controller will read each frame
+    if (!tmpCanvasRef.current && containerRef.current) {
+      const tmp = document.createElement("canvas");
+      // set initial pixel size to video
+      tmp.width = containerSize.width;
+      tmp.height = containerSize.height;
+      tmp.style.display = "none"; // keep hidden
+      containerRef.current.appendChild(tmp);
+      tmpCanvasRef.current = tmp;
+    }
+
+    // Controller init
+    const controller = new Controller({
+      inputWidth: containerSize.width,
+      inputHeight: containerSize.height,
+      maxTrack: 1,
+      onUpdate: (data) => {
+        if (!data || typeof data.type !== "string") return;
+        if (data.type === "updateMatrix") {
+          // IMPORTANT:
+          // mind-ar の onUpdate が返す worldMatrix は「マーカーのワールド行列（OpenGL座標）」です。
+          // 通常はカメラを動かすのではなく、マーカーに対応する Object3D の matrix に適用します。
+          const { targetIndex, worldMatrix } = data as any;
+          if (
+            worldMatrix !== null &&
+            worldMatrix &&
+            postMatricesRef.current[targetIndex]
+          ) {
+            const wm = new Matrix4().fromArray([...worldMatrix]);
+            const final = new Matrix4()
+              .copy(wm)
+              .multiply(postMatricesRef.current[targetIndex]);
+            // apply to anchor object (if it exists)
+            const g = anchorRef.current;
+            if (g) {
+              g.visible = true;
+              g.matrixAutoUpdate = false;
+              g.matrix.copy(final);
+              g.updateMatrixWorld(true);
+            }
+            // update tracked list for UI
+            setTrackedMarkers((prev) =>
+              prev.includes(targetIndex) ? prev : [...prev, targetIndex]
+            );
+          } else {
+            // marker lost
+            const g = anchorRef.current;
+            if (g) g.visible = false;
+            setTrackedMarkers([]);
           }
-        },
-        debugMode: true,
-        warmupTolerance: 5,
-        missTolerance: 5,
-        filterMinCF: 0.001,
-        filterBeta: 1000,
-      });
+        }
+      },
+      debugMode: true,
+      warmupTolerance: 5,
+      missTolerance: 5,
+      filterMinCF: 0.001,
+      filterBeta: 1000,
+    });
 
-      controllerRef.current = controller;
+    controllerRef.current = controller;
 
-      // load markers
+    // load markers
+    try {
+      const { dimensions: imageTargetDimensions } =
+        await controller.addImageTargets(markerUrl);
+      console.log("マーカー読み込み完了:", imageTargetDimensions);
+
+      // post matrix: convert target image size into a scale/translation so your mesh matches marker
+      postMatricesRef.current = imageTargetDimensions.map(
+        ([markerWidth, markerHeight]) =>
+          new Matrix4().compose(
+            new Vector3(
+              markerWidth / 2,
+              markerWidth / 2 + (markerHeight - markerWidth) / 2
+            ),
+            new Quaternion(),
+            new Vector3(markerWidth, markerWidth, markerWidth)
+          )
+      );
+
+      // Apply controller projection to three.js camera (do NOT set camera transform to marker matrix)
       try {
-        const result = await controller.addImageTargets(markerUrl);
-        console.log("マーカー読み込み完了:", result.dimensions);
-
-        // projection matrix -> three camera
-        let projectionMatrix: any =
-          (controller as any).projectionMatrix ||
-          (controller as any).getProjectionMatrix?.();
-        if (projectionMatrix) {
-          if (Array.isArray(projectionMatrix[0]))
-            projectionMatrix = projectionMatrix.flat();
-          const camera = new THREE.Camera();
-          camera.projectionMatrix.fromArray(projectionMatrix);
-          cameraRef.current = camera;
-        } else {
-          const camera = new THREE.PerspectiveCamera(
-            45,
-            width / height,
-            0.1,
-            1000
-          );
-          cameraRef.current = camera;
-        }
-
-        // warm up (do a dummy run)
-        try {
-          controller.dummyRun(tmpCanvasRef.current || video);
-        } catch (e) {
-          console.warn("controller.dummyRun error:", e);
-        }
-
-        // add AR objects
-        addARObjects(scene, result.dimensions);
-
-        // start loops
-        startRenderLoop();
-        startVideoToCanvasLoop();
-
-        setInitialized(true);
-      } catch (err) {
-        console.error("addImageTargets に失敗しました:", err);
+        const proj = controller.getProjectionMatrix(); // 16 elements
+        camera.projectionMatrix.fromArray(proj);
+        camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+        // keep camera matrix auto updates (we keep the camera at origin and move objects instead)
+        camera.matrixAutoUpdate = true;
+        console.log("Applied controller projection matrix to three.js camera");
+      } catch (e) {
+        console.warn("Failed to apply projection matrix to camera:", e);
       }
-    };
 
-    initController();
+      // warm up (do a dummy run)
+      try {
+        controller.dummyRun(tmpCanvasRef.current || video);
+      } catch (e) {
+        console.warn("controller.dummyRun error:", e);
+      }
+
+      // カメラの準備とマーカーデータの読み込みが完了したので、トラッキングを開始
+      startVideoToCanvasLoop();
+
+      // トラッキング開始
+      const tmp = tmpCanvasRef.current;
+      if (tmp) {
+        controller.processVideo(tmp);
+        setIsTracking(true);
+      } else {
+        console.warn("tmp canvas not ready for auto-start");
+      }
+    } catch (err) {
+      console.error("addImageTargets に失敗しました:", err);
+    }
+  };
+
+  // Controller 初期化 (カメラ準備完了後に実行)
+  useEffect(() => {
+    if (!isCameraReady) return;
+
+    const cancelledRef = { value: false };
+
+    initController(cancelledRef);
 
     return () => {
-      cancelled = true;
-      stopRenderLoop();
+      cancelledRef.value = true;
       stopVideoToCanvasLoop();
       if (controllerRef.current) {
         try {
@@ -254,7 +400,8 @@ export const ARMarkerTracker = ({ markerUrl }: ARMarkerTrackerProps) => {
         tmpCanvasRef.current = null;
       }
     };
-  }, [markerUrl]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCameraReady, markerUrl, containerSize.width, containerSize.height]);
 
   // トラッキング開始/停止: processVideo に video ではなく tmp canvas を渡す
   const toggleTracking = () => {
@@ -264,14 +411,13 @@ export const ARMarkerTracker = ({ markerUrl }: ARMarkerTrackerProps) => {
       controllerRef.current.stopProcessVideo();
       setIsTracking(false);
       setTrackedMarkers([]);
+      if (anchorRef.current) anchorRef.current.visible = false;
     } else {
       const tmp = tmpCanvasRef.current;
       if (!tmp) {
         console.warn("tmp canvas not ready");
         return;
       }
-      // tmp は startVideoToCanvasLoop により毎フレーム video を描いているので
-      // controller.processVideo(tmp) とすることで、controller のループが常に最新のフレームを読む
       controllerRef.current.processVideo(tmp);
       setIsTracking(true);
     }
@@ -279,7 +425,6 @@ export const ARMarkerTracker = ({ markerUrl }: ARMarkerTrackerProps) => {
 
   // デバッグ用：detect を tmp に対して行う
   const debugTest = async () => {
-    console.log("Debug Test");
     if (!controllerRef.current) {
       console.warn("controller not ready");
       return;
@@ -297,8 +442,6 @@ export const ARMarkerTracker = ({ markerUrl }: ARMarkerTrackerProps) => {
         "Debug detect result: featurePoints.length=",
         featurePoints.length
       );
-      console.log(featurePoints);
-      console.log("debugExtra:", debugExtra);
 
       // overlay に可視化
       const ov = overlayRef.current;
@@ -323,61 +466,9 @@ export const ARMarkerTracker = ({ markerUrl }: ARMarkerTrackerProps) => {
     }
   };
 
-  // マーカー検出時の処理
-  const handleMatrixUpdate = (
-    targetIndex: number | undefined,
-    worldMatrix: number[] | null
-  ) => {
-    if (!sceneRef.current) return;
-    if (typeof targetIndex !== "number") return;
-
-    const arObject = sceneRef.current.getObjectByName(`marker_${targetIndex}`);
-
-    if (worldMatrix && arObject) {
-      try {
-        (arObject.matrix as THREE.Matrix4).fromArray(worldMatrix);
-        arObject.matrix.decompose(
-          arObject.position,
-          arObject.quaternion,
-          arObject.scale
-        );
-        arObject.visible = true;
-        setTrackedMarkers((prev) =>
-          prev.includes(targetIndex) ? prev : [...prev, targetIndex]
-        );
-      } catch (e) {
-        console.warn("matrix apply failed", e);
-      }
-    } else if (!worldMatrix && arObject) {
-      arObject.visible = false;
-      setTrackedMarkers((prev) => prev.filter((idx) => idx !== targetIndex));
-    }
-  };
-
-  // ARオブジェクト追加
-  const addARObjects = (scene: THREE.Scene, dimensions: [number, number][]) => {
-    dimensions.forEach((dim, index) => {
-      const [width] = dim;
-      const geometry = new THREE.BoxGeometry(
-        width * 0.5,
-        width * 0.5,
-        width * 0.5
-      );
-      const material = new THREE.MeshNormalMaterial();
-      const cube = new THREE.Mesh(geometry, material);
-      cube.name = `marker_${index}`;
-      cube.position.set(0, 0, width * 0.25);
-      cube.matrixAutoUpdate = false;
-      cube.visible = false;
-      cube.matrix.identity();
-      scene.add(cube);
-    });
-  };
-
   // cleanup on unmount
   useEffect(() => {
     return () => {
-      stopRenderLoop();
       stopVideoToCanvasLoop();
       if (overlayRef.current && containerRef.current) {
         try {
@@ -393,54 +484,39 @@ export const ARMarkerTracker = ({ markerUrl }: ARMarkerTrackerProps) => {
   }, []);
 
   return (
-    <div
-      ref={containerRef}
-      style={{ position: "relative", width: "100%", height: "100vh" }}
-    >
-      <Webcam
-        ref={webcamRef}
-        audio={false}
-        videoConstraints={videoConstraints}
+    <>
+      <group ref={anchorRef} visible={false} matrixAutoUpdate={false}>
+        {children}
+      </group>
+
+      <Html
+        calculatePosition={() => [0, 0]}
+        zIndexRange={[-1, -1]}
         style={{
-          position: "absolute",
           top: 0,
           left: 0,
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-        }}
-      />
-      {/* three renderer canvas */}
-      <canvas
-        ref={canvasRef}
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
+          zIndex: -1,
           pointerEvents: "none",
         }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          bottom: 20,
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 10,
-        }}
       >
-        <button onClick={toggleTracking}>
-          {isTracking ? "トラッキング停止" : "トラッキング開始"}
-        </button>
-        <button onClick={debugTest} style={{ marginLeft: 10 }}>
-          デバッグテスト
-        </button>
-        <div style={{ color: "white", marginTop: 10 }}>
-          検出中のマーカー: {trackedMarkers.join(", ") || "なし"}
+        <div
+          style={{
+            position: "absolute",
+            bottom: 20,
+            left: 20,
+          }}
+        >
+          <button onClick={toggleTracking}>
+            {isTracking ? "トラッキング停止" : "トラッキング開始"}
+          </button>
+          <button onClick={debugTest} style={{ marginLeft: 10 }}>
+            デバッグテスト
+          </button>
+          <div style={{ color: "white", marginTop: 10 }}>
+            検出中のマーカー: {trackedMarkers.join(", ") || "なし"}
+          </div>
         </div>
-      </div>
-    </div>
+      </Html>
+    </>
   );
 };
