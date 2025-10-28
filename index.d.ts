@@ -1,3 +1,5 @@
+/// <reference types="@react-three/fiber" />
+
 import * as React from "react";
 
 export interface ARCanvasProps {
