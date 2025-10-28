@@ -1,4 +1,4 @@
-import * as React from 'react';
+import * as React from "react";
 
 export interface ARCanvasProps {
   /**
@@ -28,7 +28,7 @@ export interface ARCanvasProps {
  * }
  * ```
  */
-export const ARCanvas: React.FC<ARCanvasProps>;
+export const ARCanvas: import("react/jsx-runtime").JSX.Element;
 
 export interface ARContentProps {
   markerUrl: string;
@@ -37,10 +37,12 @@ export interface ARContentProps {
     width: number;
     height: number;
   };
-  setContainerSize: React.Dispatch<React.SetStateAction<{
-    width: number;
-    height: number;
-  }>>;
+  setContainerSize: React.Dispatch<
+    React.SetStateAction<{
+      width: number;
+      height: number;
+    }>
+  >;
   webcamRef: React.RefObject<any>;
   isCameraReady: boolean;
   children?: React.ReactNode;
@@ -50,4 +52,4 @@ export interface ARContentProps {
  * Internal component that handles AR content rendering
  * Not intended for direct use - use ARCanvas instead
  */
-export const ARContent: React.FC<ARContentProps>;
+export const ARContent: import("react/jsx-runtime").JSX.Element;
