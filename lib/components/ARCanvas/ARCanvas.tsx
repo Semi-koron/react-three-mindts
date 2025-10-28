@@ -45,7 +45,6 @@ export const ARCanvas = ({ markerUrl, children }: ARCanvasProps) => {
         position: "relative",
       }}
     >
-      {/* three renderer canvas */}
       <Canvas style={{ position: "absolute", inset: 0 }}>
         <ARContent
           markerUrl={markerUrl}
@@ -170,7 +169,6 @@ export const ARContent = ({
     drawRafRef.current = requestAnimationFrame(loop);
   };
 
-  // 親要素のサイズ監視
   useEffect(() => {
     if (!containerRef.current) return;
     const updateSize = () => {
@@ -181,7 +179,6 @@ export const ARContent = ({
     const ro = new ResizeObserver(updateSize);
     ro.observe(containerRef.current);
     return () => ro.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const stopVideoToCanvasLoop = () => {
@@ -270,13 +267,11 @@ export const ARContent = ({
 
     controllerRef.current = controller;
 
-    // load markers
     try {
       const { dimensions: imageTargetDimensions } =
         await controller.addImageTargets(markerUrl);
       console.log("マーカー読み込み完了:", imageTargetDimensions);
 
-      // post matrix: convert target image size into a scale/translation so your mesh matches marker
       postMatricesRef.current = imageTargetDimensions.map(
         ([markerWidth, markerHeight]) =>
           new Matrix4().compose(
@@ -289,29 +284,24 @@ export const ARContent = ({
           )
       );
 
-      // Apply controller projection to three.js camera (do NOT set camera transform to marker matrix)
       try {
-        const proj = controller.getProjectionMatrix(); // 16 elements
+        const proj = controller.getProjectionMatrix();
         camera.projectionMatrix.fromArray(proj);
         camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
-        // keep camera matrix auto updates (we keep the camera at origin and move objects instead)
         camera.matrixAutoUpdate = true;
         console.log("Applied controller projection matrix to three.js camera");
       } catch (e) {
         console.warn("Failed to apply projection matrix to camera:", e);
       }
 
-      // warm up (do a dummy run)
       try {
         controller.dummyRun(tmpCanvasRef.current || video);
       } catch (e) {
         console.warn("controller.dummyRun error:", e);
       }
 
-      // カメラの準備とマーカーデータの読み込みが完了したので、トラッキングを開始
       startVideoToCanvasLoop();
 
-      // トラッキング開始
       const tmp = tmpCanvasRef.current;
       if (tmp) {
         controller.processVideo(tmp);
@@ -323,7 +313,6 @@ export const ARContent = ({
     }
   };
 
-  // Controller 初期化 (カメラ準備完了後に実行)
   useEffect(() => {
     if (!isCameraReady) return;
 
@@ -347,10 +336,8 @@ export const ARContent = ({
         tmpCanvasRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCameraReady, markerUrl, containerSize.width, containerSize.height]);
 
-  // cleanup on unmount
   useEffect(() => {
     return () => {
       stopVideoToCanvasLoop();
