@@ -28,7 +28,7 @@ export interface ARCanvasProps {
  * }
  * ```
  */
-export const ARCanvas: import("react/jsx-runtime").JSX.Element;
+export function ARCanvas(props: ARCanvasProps): React.JSX.Element;
 
 export interface ARContentProps {
   markerUrl: string;
@@ -52,4 +52,4 @@ export interface ARContentProps {
  * Internal component that handles AR content rendering
  * Not intended for direct use - use ARCanvas instead
  */
-export const ARContent: import("react/jsx-runtime").JSX.Element;
+export function ARContent(props: ARContentProps): React.JSX.Element;
