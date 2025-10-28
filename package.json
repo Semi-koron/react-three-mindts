@@ -4,6 +4,17 @@
   "version": "0.0.1",
   "description": "A React Three Fiber component for augmented reality using MindAR.js and TypeScript.",
   "author": "semikoron",
+  "license": "MIT",
+  "keywords": [
+    "react",
+    "react-three-fiber",
+    "threejs",
+    "mindar",
+    "augmented-reality",
+    "ar",
+    "typescript",
+    "webcam"
+  ],
   "packageManager": "npm@10.9.2",
   "repository": {
     "type": "git",
