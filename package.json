@@ -1,39 +1,47 @@
 {
-  "name": "fiber-mind-ts",
+  "name": "react-three-mind-ts",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "files": [
     "dist",
     "index.d.ts"
   ],
-  "main": "./dist/counter.umd.cjs",
-  "module": "./dist/counter.js",
+  "main": "./dist/ar-canvas.cjs",
+  "module": "./dist/ar-canvas.js",
   "types": "./index.d.ts",
   "exports": {
     "types": "./index.d.ts",
-    "import": "./dist/counter.js",
-    "require": "./dist/counter.umd.cjs"
+    "import": "./dist/ar-canvas.js",
+    "require": "./dist/ar-canvas.cjs"
   },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build"
   },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "react-webcam": "^7.0.0",
+    "three": "^0.180.0",
+    "@react-three/fiber": "^9.0.0",
+    "@react-three/drei": "^10.0.0"
+  },
+  "dependencies": {
+    "mind-ar": "^1.2.5"
+  },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.8",
     "@types/react-dom": "^19.2.2",
+    "@types/three": "^0.180.0",
     "@vitejs/plugin-react": "^5.0.4",
-    "typescript": "~5.9.2",
-    "vite": "^7.1.5"
-  },
-  "dependencies": {
     "@react-three/drei": "^10.7.6",
     "@react-three/fiber": "^9.4.0",
-    "@types/three": "^0.180.0",
-    "mind-ar": "^1.2.5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-webcam": "^7.2.0",
-    "three": "^0.180.0"
+    "three": "^0.180.0",
+    "typescript": "~5.9.2",
+    "vite": "^7.1.5"
   }
 }

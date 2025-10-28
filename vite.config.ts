@@ -4,25 +4,41 @@ import commonjs from "@rollup/plugin-commonjs";
 import { resolve } from "path";
 
 export default defineConfig({
-  plugins: [react(), commonjs()],
+  plugins: [
+    react(),
+    commonjs({
+      include: /node_modules/,
+      requireReturnsDefault: "auto",
+      esmExternals: true,
+    }),
+  ],
   build: {
     lib: {
       entry: resolve(__dirname, "./lib/main.ts"),
-      name: "Counter",
-      fileName: "counter",
-      formats: ["es", "cjs"], // ESMとCommonJS両方を出力
+      name: "ARCanvas",
+      fileName: "ar-canvas",
+      formats: ["es", "cjs"],
     },
     rollupOptions: {
-      // React系は外部依存として扱う（利用者側で用意してもらう）
-      external: ["react", "react-dom", "react/jsx-runtime"],
+      external: [
+        "react",
+        "react-dom",
+        "react/jsx-runtime",
+        "react-webcam",
+        "three",
+        "@react-three/fiber",
+        "@react-three/drei",
+      ],
       output: {
         globals: {
           react: "React",
           "react-dom": "ReactDOM",
           "react/jsx-runtime": "react/jsx-runtime",
+          three: "THREE",
+          "@react-three/fiber": "ReactThreeFiber",
+          "@react-three/drei": "ReactThreeDrei",
         },
       },
-      // mind-arとlongはexternalに指定しないことで、バンドルに含める
     },
   },
   optimizeDeps: {

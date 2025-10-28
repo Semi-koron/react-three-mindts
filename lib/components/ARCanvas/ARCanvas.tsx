@@ -14,7 +14,7 @@ import { Matrix4, Quaternion, Vector3 } from "three";
 import { Canvas, useThree } from "@react-three/fiber";
 
 interface ARCanvasProps {
-  markerUrl: string; // コンパイル済みマーカーデータのURL
+  markerUrl: string;
   children?: React.ReactNode;
 }
 
@@ -72,7 +72,7 @@ export const ARCanvas = ({ markerUrl, children }: ARCanvasProps) => {
           top: 0,
           left: 0,
           zIndex: -1,
-          pointerEvents: "none", // video にマウスイベントを通さない
+          pointerEvents: "none",
           width: "100%",
           height: "100%",
           objectFit: "cover",
@@ -109,75 +109,60 @@ export const ARContent = ({
   isCameraReady,
   children,
 }: ARContentProps) => {
-  const overlayRef = useRef<HTMLCanvasElement | null>(null); // debug overlay
-  const tmpCanvasRef = useRef<HTMLCanvasElement | null>(null); // video -> canvas 毎フレーム描画用
+  const tmpCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const controllerRef = useRef<Controller | null>(null);
   const drawRafRef = useRef<number | null>(null);
   const postMatricesRef = useRef<THREE.Matrix4[]>([]);
-
-  // Anchor object ref (this is the object that will be moved to follow the marker)
   const anchorRef = useRef<THREE.Group | null>(null);
 
   const { camera } = useThree();
 
-  // video -> tmp canvas 描画ループ（常時実行しておき、processVideo に tmp を渡す）
-  // objectFit: "cover" で表示されている部分のみを切り取って描画
   const startVideoToCanvasLoop = () => {
     if (drawRafRef.current !== null) return;
     const loop = () => {
       const video = webcamRef.current?.video;
       const tmp = tmpCanvasRef.current;
       if (video && tmp && video.videoWidth && video.videoHeight) {
-        // ensure tmp canvas pixel size matches expected controller input size
         const controller = controllerRef.current;
         const targetW = controller ? controller.inputWidth : video.videoWidth;
         const targetH = controller ? controller.inputHeight : video.videoHeight;
         if (tmp.width !== targetW || tmp.height !== targetH) {
           tmp.width = targetW;
           tmp.height = targetH;
-          // keep CSS full-size to match UI
           tmp.style.width = "100%";
           tmp.style.height = "100%";
         }
         const ctx = tmp.getContext("2d")!;
         ctx.clearRect(0, 0, tmp.width, tmp.height);
 
-        // objectFit: "cover" と同じ動作を実装
-        // video の実際の解像度
         const videoWidth = video.videoWidth;
         const videoHeight = video.videoHeight;
         const videoAspect = videoWidth / videoHeight;
-
-        // container（表示領域）のアスペクト比
         const containerAspect = containerSize.width / containerSize.height;
 
-        // objectFit: "cover" の計算
         let sourceX = 0;
         let sourceY = 0;
         let sourceWidth = videoWidth;
         let sourceHeight = videoHeight;
 
         if (videoAspect > containerAspect) {
-          // video が横長 -> 左右をトリミング
           sourceWidth = videoHeight * containerAspect;
           sourceX = (videoWidth - sourceWidth) / 2;
         } else {
-          // video が縦長 -> 上下をトリミング
           sourceHeight = videoWidth / containerAspect;
           sourceY = (videoHeight - sourceHeight) / 2;
         }
 
-        // 切り取った部分を tmp canvas に描画
         ctx.drawImage(
           video,
           sourceX,
           sourceY,
           sourceWidth,
-          sourceHeight, // source rectangle
+          sourceHeight,
           0,
           0,
           tmp.width,
-          tmp.height // destination rectangle
+          tmp.height
         );
       }
       drawRafRef.current = requestAnimationFrame(loop);
@@ -235,31 +220,15 @@ export const ARContent = ({
     });
     if (cancelled.value) return;
 
-    // overlay for debug
-    if (!overlayRef.current && containerRef.current) {
-      const ov = document.createElement("canvas");
-      ov.style.position = "absolute";
-      ov.style.top = "0";
-      ov.style.left = "0";
-      ov.style.pointerEvents = "none";
-      ov.style.width = "100%";
-      ov.style.height = "100%";
-      containerRef.current.appendChild(ov);
-      overlayRef.current = ov;
-    }
-
-    // tmp canvas (offscreen/hidden) - this is what controller will read each frame
     if (!tmpCanvasRef.current && containerRef.current) {
       const tmp = document.createElement("canvas");
-      // set initial pixel size to video
       tmp.width = containerSize.width;
       tmp.height = containerSize.height;
-      tmp.style.display = "none"; // keep hidden
+      tmp.style.display = "none";
       containerRef.current.appendChild(tmp);
       tmpCanvasRef.current = tmp;
     }
 
-    // Controller init
     const controller = new Controller({
       inputWidth: containerSize.width,
       inputHeight: containerSize.height,
@@ -269,9 +238,6 @@ export const ARContent = ({
           return;
         }
         if (data.type === "updateMatrix") {
-          // IMPORTANT:
-          // mind-ar の onUpdate が返す worldMatrix は「マーカーのワールド行列（OpenGL座標）」です。
-          // 通常はカメラを動かすのではなく、マーカーに対応する Object3D の matrix に適用します。
           const { targetIndex, worldMatrix } = data as any;
           if (
             worldMatrix !== null &&
@@ -282,7 +248,6 @@ export const ARContent = ({
             const final = new Matrix4()
               .copy(wm)
               .multiply(postMatricesRef.current[targetIndex]);
-            // apply to anchor object (if it exists)
             const g = anchorRef.current;
             if (g) {
               g.visible = true;
@@ -291,7 +256,6 @@ export const ARContent = ({
               g.updateMatrixWorld(true);
             }
           } else {
-            // marker lost
             const g = anchorRef.current;
             if (g) g.visible = false;
           }
@@ -376,12 +340,6 @@ export const ARContent = ({
         } catch {}
         controllerRef.current = null;
       }
-      if (overlayRef.current && containerRef.current) {
-        try {
-          containerRef.current.removeChild(overlayRef.current);
-        } catch {}
-        overlayRef.current = null;
-      }
       if (tmpCanvasRef.current && containerRef.current) {
         try {
           containerRef.current.removeChild(tmpCanvasRef.current);
@@ -396,11 +354,6 @@ export const ARContent = ({
   useEffect(() => {
     return () => {
       stopVideoToCanvasLoop();
-      if (overlayRef.current && containerRef.current) {
-        try {
-          containerRef.current.removeChild(overlayRef.current);
-        } catch {}
-      }
       if (tmpCanvasRef.current && containerRef.current) {
         try {
           containerRef.current.removeChild(tmpCanvasRef.current);
