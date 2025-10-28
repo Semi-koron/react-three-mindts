@@ -1,15 +1,32 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import commonjs from "@rollup/plugin-commonjs";
+import { nodeResolve } from "@rollup/plugin-node-resolve";
 import { resolve } from "path";
 
 export default defineConfig({
   plugins: [
     react(),
+    nodeResolve({
+      preferBuiltins: false,
+    }),
     commonjs({
       include: /node_modules/,
-      requireReturnsDefault: "auto",
+      requireReturnsDefault: "preferred",
       esmExternals: true,
+      defaultIsModuleExports: "auto",
+      transformMixedEsModules: true,
+      dynamicRequireTargets: ["node_modules/long/**/*.js"],
+      ignore: (id) => {
+        if (
+          id.includes("react") ||
+          id.includes("three") ||
+          id.includes("@react-three")
+        ) {
+          return true;
+        }
+        return false;
+      },
     }),
   ],
   build: {
@@ -38,6 +55,9 @@ export default defineConfig({
           "@react-three/fiber": "ReactThreeFiber",
           "@react-three/drei": "ReactThreeDrei",
         },
+        // CommonJSモジュールのインターオペラビリティを改善
+        interop: "auto",
+        preserveModules: false,
       },
     },
   },

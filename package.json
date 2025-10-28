@@ -1,7 +1,7 @@
 {
   "name": "react-three-mindts",
   "private": false,
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "A React Three Fiber component for augmented reality using MindAR.js and TypeScript.",
   "author": "semikoron",
   "license": "MIT",
@@ -35,26 +35,27 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build"
+    "build": "tsc && vite build && node scripts/post-build.js"
   },
   "peerDependencies": {
+    "@react-three/drei": "^10.0.0",
+    "@react-three/fiber": "^9.0.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
     "react-webcam": "^7.0.0",
-    "three": "^0.180.0",
-    "@react-three/fiber": "^9.0.0",
-    "@react-three/drei": "^10.0.0"
+    "three": "^0.180.0"
   },
   "dependencies": {
     "mind-ar": "^1.2.5"
   },
   "devDependencies": {
+    "@react-three/drei": "^10.7.6",
+    "@react-three/fiber": "^9.4.0",
     "@rollup/plugin-commonjs": "^28.0.8",
+    "@rollup/plugin-node-resolve": "^16.0.3",
     "@types/react-dom": "^19.2.2",
     "@types/three": "^0.180.0",
     "@vitejs/plugin-react": "^5.0.4",
-    "@react-three/drei": "^10.7.6",
-    "@react-three/fiber": "^9.4.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-webcam": "^7.2.0",
