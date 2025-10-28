@@ -1,7 +1,14 @@
 {
-  "name": "react-three-mind-ts",
-  "private": true,
+  "name": "react-three-mindts",
+  "private": false,
   "version": "0.0.1",
+  "description": "A React Three Fiber component for augmented reality using MindAR.js and TypeScript.",
+  "author": "semikoron",
+  "packageManager": "npm@10.9.2",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Semi-koron/react-three-mindts"
+  },
   "type": "module",
   "files": [
     "dist",
