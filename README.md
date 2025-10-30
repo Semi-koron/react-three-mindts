@@ -1,4 +1,4 @@
-## 概要　 discription
+## 概要　 description
 
 mindar の imagetracking を気軽に ts で書くことができるコンポーネントライブラリになります。
 

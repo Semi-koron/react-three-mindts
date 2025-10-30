@@ -1,7 +1,7 @@
 {
   "name": "react-three-mindts",
   "private": false,
-  "version": "0.0.9",
+  "version": "0.0.11",
   "description": "A React Three Fiber component for augmented reality using MindAR.js and TypeScript.",
   "author": "semikoron",
   "license": "MIT",
@@ -46,7 +46,11 @@
     "three": "^0.180.0"
   },
   "dependencies": {
-    "mind-ar": "^1.2.5"
+    "mind-ar": "^1.2.5",
+    "@napi-rs/canvas": "^0.1.81"
+  },
+  "overrides": {
+    "canvas": "npm:@napi-rs/canvas@^0.1.81"
   },
   "devDependencies": {
     "@react-three/drei": "^10.7.6",
